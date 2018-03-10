@@ -34,69 +34,82 @@
   :type '(string)
   :group 'kafka-cli)
 
+(defvar kafka-verbose 1 "Non-nill if kafka emits messages")
+
+(eval-when-compile
+  (defmacro kafka-bin (bin)
+    `(expand-file-name ,bin kafka-cli-bin-path))
+
+  (defmacro kafka-config (config)
+    `(expand-file-name ,config kafka-cli-config-path))
+
+  (defmacro kafka-output-buffer ()
+    `(get-buffer-create "*kafka-output*"))
+
+  (defmacro kafka-topics-buffer ()
+    `(get-buffer-create "*kafka-topics*"))
+
+  (defmacro kafka-emit (fmt &optional args)
+    (when kafka-verbose
+      `(message ,fmt ,args)))
+
+  (defmacro with-output-to-topics-list (bin msg &rest args)
+    (declare (indent 2))
+    `(let* ((buff (kafka-output-buffer))
+            (call-proc-args (list (kafka-bin ,bin) nil buff t))
+            (kafka-args ,@args)
+            (option-args
+             (apply 'append
+                    (mapcar 'split-string (kafka-create-alter-topics-arguments)))))
+       (apply 'call-process (append call-proc-args kafka-args option-args))
+       (kafka-emit-msg "Topic: %s, %s" ,msg topic)
+       (kafka-topics-list))))
+
 ;;;###autoload
 (defun kafka-topics-alter (topic)
   "Alter topic TOPIC."
-  (interactive (list (completing-read "Topic:" (--get-topics))))
-  (let*
-      ((buff (get-buffer-create "*kafka-output*"))
-       (call-proc-args (list (concat kafka-cli-bin-path "/kafka-topics.sh")
-                             nil buff t))
-       (kafka-args (list "--zookeeper" zookeeper-url
-                         "--alter"
-                         "--topic" topic))
-       (options-args
-        (apply 'append (mapcar 'split-string (kafka-create-alter-topics-arguments)))))
-    (apply 'call-process (append call-proc-args kafka-args options-args))
-    (message "Topic: %s, altered" topic)
-    (kafka-topics-list)))
+  (interactive (list (completing-read "Topic:" (kafka--get-topics))))
+  (with-output-to-topics-list "kafka-topics.sh" "altered"
+    (list "--zookeeper" zookeeper-url
+          "--alter"
+          "--topic" topic)))
 
 ;;;###autoload
 (defun kafka-topics-create (topic partition)
   "Create the TOPIC with PARTITION."
   (interactive "sTopic: \nsPartition:")
-  (let*
-      ((buff (get-buffer-create "*kafka-output*"))
-       (call-proc-args
-        (list (concat kafka-cli-bin-path "/kafka-topics.sh") nil buff t))
-       (kafka-args (list "--zookeeper" zookeeper-url
-                         "--create"
-                         "--topic" topic
-                         "--partition" partition
-                         "--replication-factor" "1"))
-       (options-args
-        (apply 'append (mapcar 'split-string (kafka-create-alter-topics-arguments)))))
-    (apply 'call-process (append call-proc-args kafka-args options-args))
-    (message "Topic: %s, created" topic)
-    (kafka-topics-list)))
+  (with-output-to-topics-list "kafka-topics.sh" "created"
+    (list "--zookeeper" zookeeper-url
+          "--create"
+          "--topic" topic
+          "--partition" partition
+          "--replication-factor" "1")))
 
 ;;;###autoload
 (defun kafka-topics-delete (topic)
   "Delete the TOPIC ."
-  (interactive (list (completing-read "Topic:" (--get-topics))))
-  (let* ((topics-cli (concat kafka-cli-bin-path "/kafka-topics.sh"))
-	 (buff (get-buffer-create "*kafka-output*")))
-    (call-process topics-cli nil buff t
+  (interactive (list (completing-read "Topic:" (kafka--get-topics))))
+  (call-process (kafka-bin "kafka-topics.sh") nil (kafka-output-buffer) t
                   "--zookeeper" zookeeper-url
                   "--topic" topic
                   "--delete")
-    (message "Topic: %s, deleted" topic)
-    (kafka-topics-list)))
+  (kafka-emit "Topic: %s, deleted" topic)
+  (kafka-topics-list))
 
 ;;;###autoload
 (defun kafka-topics-describe (topic)
   "Describe the topic TOPIC in the kafka-topics section."
-  (interactive (list (completing-read "Topic:" (--get-topics))))
+  (interactive (list (completing-read "Topic:" (kafka--get-topics))))
   (kafka-topics-list)
   (kafka-cli-section-goto-topic topic)
   (kafka-topics-describe-at-point))
 
 ;;;###autoload
 (defun kafka-topics-list ()
-  "List all the topics in the zookeeper ."
+  "List all the topics in the zookeeper."
   (interactive) ;; Refer magit how to write your own list buffer mode?
-  (let* ((buff (get-buffer-create "*kafka-topics*"))
-	 (topics-cli (concat kafka-cli-bin-path "/kafka-topics.sh")))
+  (let* ((buff (kafka-output-buffer))
+	 (topics-cli (kafka-bin "kafka-topics.sh")))
     (set-buffer buff)
     (setq buffer-read-only 'nil)
     (erase-buffer)
@@ -106,19 +119,19 @@
     (switch-to-buffer buff)
     (kafka-cli-topic-mode)))
 
-(defun --get-topics (&optional update)
+(defun kafka--get-topics (&optional update)
   "Either get topics or get and update based on flag UPDATE."
-  (if (or  (not (boundp 'all-topics)) update)
+  (if (or (not (boundp 'all-topics)) update)
       (save-excursion
         (kafka-topics-list)
-        (with-current-buffer (get-buffer "*kafka-topics*")
+        (with-current-buffer (kafka-topics-buffer)
 	  (setq all-topics (split-string (buffer-string)))))
     all-topics))
 
 (defun kafka-consumer-get-offset (topic)
   "Get TOPIC offset information."
-  (message "topic: %S" topic)
-  (let* ((consumer-cli (concat kafka-cli-bin-path "/kafka-consumer-offset-checker.sh"))
+  (kafka-emit "topic: %S" topic)
+  (let* ((consumer-cli (kafka-bin "/kafka-consumer-offset-checker.sh"))
 	 (output
           (process-lines consumer-cli
                          "--topic" topic
