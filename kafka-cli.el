@@ -4,9 +4,35 @@
 
 ;; todo check if library exists else issue warning
 (require 'magit-popup)
-(require 'kafka-cli-custom)
-(require 'kafka-cli-services)
 (require 'kafka-cli-sections)
+(require 'comint)
+
+;;; Custom variables
+
+(defcustom kafka-cli-bin-path "/home/ebby/apps/kafka/kafka/bin/"
+  "Kafka CLI tools path."
+  :type '(string)
+  :group 'kafka-cli)
+
+(defcustom kafka-cli-config-path "/home/ebby/apps/kafka/kafka/config/"
+  "Kafka CLI config path."
+  :type '(string)
+  :group 'kafka-cli)
+
+(defcustom zookeeper-url "localhost:2181"
+  "Zookeeper hostname and port."
+  :type '(string)
+  :group 'kafka-cli)
+
+(defcustom kafka-url "localhost:9092"
+  "Kafka broker hostname and port."
+  :type '(string)
+  :group 'kafka-cli)
+
+(defcustom kafka-consumer-whitelist-topics "(.*)"
+  "List of topics to consume from."
+  :type '(string)
+  :group 'kafka-cli)
 
 ;;;###autoload
 (defun kafka-topics-alter (topic)
@@ -14,9 +40,13 @@
   (interactive (list (completing-read "Topic:" (--get-topics))))
   (let*
       ((buff (get-buffer-create "*kafka-output*"))
-       (call-proc-args (list (concat kafka-cli-bin-path "/kafka-topics.sh") nil buff t))
-       (kafka-args (list "--zookeeper" zookeeper-url "--alter" "--topic" topic))
-       (options-args (apply 'append (mapcar 'split-string (kafka-create-alter-topics-arguments)))))
+       (call-proc-args (list (concat kafka-cli-bin-path "/kafka-topics.sh")
+                             nil buff t))
+       (kafka-args (list "--zookeeper" zookeeper-url
+                         "--alter"
+                         "--topic" topic))
+       (options-args
+        (apply 'append (mapcar 'split-string (kafka-create-alter-topics-arguments)))))
     (apply 'call-process (append call-proc-args kafka-args options-args))
     (message "Topic: %s, altered" topic)
     (kafka-topics-list)))
@@ -27,9 +57,15 @@
   (interactive "sTopic: \nsPartition:")
   (let*
       ((buff (get-buffer-create "*kafka-output*"))
-       (call-proc-args (list (concat kafka-cli-bin-path "/kafka-topics.sh") nil buff t))
-       (kafka-args (list "--zookeeper" zookeeper-url "--create" "--topic" topic "--partition" partition "--replication-factor" "1"))
-       (options-args (apply 'append (mapcar 'split-string (kafka-create-alter-topics-arguments)))))
+       (call-proc-args
+        (list (concat kafka-cli-bin-path "/kafka-topics.sh") nil buff t))
+       (kafka-args (list "--zookeeper" zookeeper-url
+                         "--create"
+                         "--topic" topic
+                         "--partition" partition
+                         "--replication-factor" "1"))
+       (options-args
+        (apply 'append (mapcar 'split-string (kafka-create-alter-topics-arguments)))))
     (apply 'call-process (append call-proc-args kafka-args options-args))
     (message "Topic: %s, created" topic)
     (kafka-topics-list)))
@@ -40,7 +76,10 @@
   (interactive (list (completing-read "Topic:" (--get-topics))))
   (let* ((topics-cli (concat kafka-cli-bin-path "/kafka-topics.sh"))
 	 (buff (get-buffer-create "*kafka-output*")))
-    (call-process topics-cli nil buff t "--zookeeper" zookeeper-url "--topic" topic "--delete")
+    (call-process topics-cli nil buff t
+                  "--zookeeper" zookeeper-url
+                  "--topic" topic
+                  "--delete")
     (message "Topic: %s, deleted" topic)
     (kafka-topics-list)))
 
@@ -61,24 +100,30 @@
     (set-buffer buff)
     (setq buffer-read-only 'nil)
     (erase-buffer)
-    (call-process topics-cli nil buff t "--zookeeper" zookeeper-url "--list")
+    (call-process topics-cli nil buff t
+                  "--zookeeper" zookeeper-url
+                  "--list")
     (switch-to-buffer buff)
     (kafka-cli-topic-mode)))
 
 (defun --get-topics (&optional update)
   "Either get topics or get and update based on flag UPDATE."
   (if (or  (not (boundp 'all-topics)) update)
-    (save-excursion
-      (kafka-topics-list)
-      (with-current-buffer (get-buffer "*kafka-topics*")
-	(setq all-topics (split-string (buffer-string)))))
+      (save-excursion
+        (kafka-topics-list)
+        (with-current-buffer (get-buffer "*kafka-topics*")
+	  (setq all-topics (split-string (buffer-string)))))
     all-topics))
 
 (defun kafka-consumer-get-offset (topic)
   "Get TOPIC offset information."
   (message "topic: %S" topic)
   (let* ((consumer-cli (concat kafka-cli-bin-path "/kafka-consumer-offset-checker.sh"))
-	 (output (process-lines consumer-cli "--topic" topic "--zookeeper" zookeeper-url "--group" "kafka-cli-consumer"))
+	 (output
+          (process-lines consumer-cli
+                         "--topic" topic
+                         "--zookeeper" zookeeper-url
+                         "--group" "kafka-cli-consumer"))
 	 (keys (split-string (cadr output)))
 	 (values (split-string (caddr output))))
     (mapcar* #'cons keys values)))
@@ -87,17 +132,18 @@
 (defun kafka-consumer-describe-at-point ()
   "."
   (interactive)
-  (let* ((topic (buffer-substring-no-properties (line-beginning-position) (line-end-position)))
+  (let* ((topic (buffer-substring-no-properties (line-beginning-position)
+                                                (line-end-position)))
 	 (output (kafka-consumer-get-offset topic)))
     (save-excursion
       (consumer-desc-section-toggle output))))
-
 
 ;;;###autoload
 (defun kafka-topics-delete-at-point ()
   "Delete topic at point."
   (interactive)
-  (let* ((topic (buffer-substring-no-properties (line-beginning-position) (line-end-position))))
+  (let* ((topic (buffer-substring-no-properties (line-beginning-position)
+                                                (line-end-position))))
     (if (yes-or-no-p (format "Delete topic: %s" topic))
 	(kafka-topics-delete topic)
       (message "(No deletions performed)"))))
@@ -106,16 +152,19 @@
 (defun kafka-topic-get-desc (topic)
   "Describe topic TOPIC."
   (let* ((topics-cli (concat kafka-cli-bin-path "/kafka-topics.sh")))
-    (process-lines topics-cli "--topic" topic "--zookeeper" zookeeper-url "--describe")))
+    (process-lines topics-cli
+                   "--topic" topic
+                   "--zookeeper" zookeeper-url
+                   "--describe")))
 
 ;;;###autoload
 (defun kafka-topics-describe-at-point ()
   "."
   (interactive)
-  (let* ((topic (buffer-substring-no-properties (line-beginning-position) (line-end-position))))
+  (let* ((topic (buffer-substring-no-properties (line-beginning-position)
+                                                (line-end-position))))
     (save-excursion
       (topic-desc-section-toggle (kafka-topic-get-desc topic)))))
-
 
 (defun show-kafka-server ()
   "Show Kafka Server."
@@ -158,22 +207,24 @@
 (magit-define-popup kafka-create-alter-topics-popup
   "Kafka Create Topics"
   :options '((?p "[compact, delete]" "--config cleanup.policy=")
-	     (?z "[uncompressed, snappy, lz4, gzip, producer]" "--config compression.type=")
+	     (?z "[uncompressed, snappy, lz4, gzip, producer]"
+                 "--config compression.type=")
 	     (?x "[0,...]" "--config delete.retention.ms=")
 	     (?X "[0,...]" "--config file.delete.delay.ms=")
 	     (?f "[0,...]" "--config flush.messages=")
 	     (?F "[0,...]" "--config flush.ms=")
-	     (?T "kafka.server.ThrottledReplicaListValidator$@1060b431" "--config follower.replication.throttled.="))
+	     (?T "kafka.server.ThrottledReplicaListValidator$@1060b431"
+                 "--config follower.replication.throttled.="))
   :actions '((?c "Create Topic" kafka-topics-create)
 	     (?a "Alter Topic" kafka-topics-alter)
 	     (?q "Back" bury-buffer))
   :default-action 'kafka-topics-create)
 
-
 ;; rename aptly
 (magit-define-popup kafka-topics-options-popup
   "Kafka Topics Options"
-  :actions '((?c "Describe consumer for topic" kafka-consumer-describe-at-point)
+  :actions '((?c "Describe consumer for topic"
+                 kafka-consumer-describe-at-point)
 	     (?d "Describe Topic" kafka-topics-describe-at-point)
 	     (?q  "Back" bury-buffer))
   :default-action 'bury-buffer)
@@ -181,14 +232,14 @@
 ;;;###autoload
 (magit-define-popup kafka-topics-popup
   "Kafka Topics Popup."
-  :actions '((?c "Create/Alter Topics" kafka-create-alter-topics-popup)
+  :actions '((?c "Create/Alter Topics"
+                 kafka-create-alter-topics-popup)
 	     (?d "Delete Topics" kafka-topics-delete)
 	     (?h "Describe Topics" kafka-topics-describe)
 	     (?O "Services Overview" kafka-services-popup)
 	     (?l "List all Topics" kafka-topics-list)
 	     (?q "Back" bury-buffer))
   :default-action 'kafka-topics-list)
-
 
 (defun do-nothing ()
   (message "not implemented"))
@@ -228,8 +279,8 @@
 
 ;; use rx and improvise this
 (defvar kafka-cli-log-mode-highlights
-  '((
-     ("INFO\\|WARN" . font-lock-keyword-face)
+  '((("INFO\\|WARN"
+      . font-lock-keyword-face)
      ("^\\[\\(.*?\\)\\]" . font-lock-builtin-face)
      ("\(\\(.*?\\)\)" . font-lock-variable-name-face))))
 
@@ -249,8 +300,7 @@
   "Keymap for `kafka-cli-consumer-mode' .")
 
 (defvar kafka-cli-consumer-mode-highlights
-  '((
-     ("\\w*" . font-lock-variable-name-face))))
+  '((("\\w*" . font-lock-variable-name-face))))
 
 (define-derived-mode kafka-cli-consumer-mode comint-mode "KafkaCliConsumer"
   "Mode for looking at consumer.
@@ -268,31 +318,30 @@
   "Keymap for `kafka-cli-topic-mode'.")
 
 (defvar kafka-cli-topic-highlights
-       '((
-	  ("Topic\\|PartitionCount\\|Configs\\|Leader\\|Replicas\\|Isr\\|ReplicationFactor\\|Partition\\|Group\\|Broker\\|Pid\\|Offset\\|logSize\\|Lag\\|Owner" . font-lock-keyword-face)
-	  ("\\w*" . font-lock-variable-name-face)
-	  (":\\|,\\|;\\|{\\|}\\|=>\\|@\\|$\\|=" . font-lock-string-face))))
+  '((("Topic\\|PartitionCount\\|Configs\\|Leader\\|Replicas\\|Isr\\|ReplicationFactor\\|Partition\\|Group\\|Broker\\|Pid\\|Offset\\|logSize\\|Lag\\|Owner" . font-lock-keyword-face)
+     ("\\w*" . font-lock-variable-name-face)
+     (":\\|,\\|;\\|{\\|}\\|=>\\|@\\|$\\|=" . font-lock-string-face))))
 
 ;; Clean this up
- (defun kafka-cli-topic-mode-properties ()
-   "."
-   (interactive)
-   (let* ((more-lines t)
-	  (map (make-sparse-keymap))
-	  (start)
-	  (end))
-     (with-current-buffer (get-buffer-create "*kafka-topics*")
-       (define-key map (kbd "C-m") 'kafka-topics-describe-at-point)
-       (define-key map (kbd "C-o") 'kafka-consumer-describe-at-point)
-       (define-key map (kbd "?") 'kafka-topics-options-popup)
-       (define-key map (kbd "D") 'kafka-topics-delete-at-point)
-       (beginning-of-buffer)
-       (while more-lines
-	 (setq start (line-beginning-position))
-	 (setq end (line-end-position))
-	 (put-text-property start end 'keymap map)
-	 (add-text-properties start end '(topic t))
-	 (setq more-lines (= 0 (forward-line 1)))))))
+(defun kafka-cli-topic-mode-properties ()
+  "."
+  (interactive)
+  (let* ((more-lines t)
+	 (map (make-sparse-keymap))
+	 (start)
+	 (end))
+    (with-current-buffer (get-buffer-create "*kafka-topics*")
+      (define-key map (kbd "C-m") 'kafka-topics-describe-at-point)
+      (define-key map (kbd "C-o") 'kafka-consumer-describe-at-point)
+      (define-key map (kbd "?") 'kafka-topics-options-popup)
+      (define-key map (kbd "D") 'kafka-topics-delete-at-point)
+      (beginning-of-buffer)
+      (while more-lines
+	(setq start (line-beginning-position))
+	(setq end (line-end-position))
+	(put-text-property start end 'keymap map)
+	(add-text-properties start end '(topic t))
+	(setq more-lines (= 0 (forward-line 1)))))))
 
 (define-derived-mode kafka-cli-topic-mode special-mode "KafkaCliTopic"
   "Mode for looking at kafka topics.

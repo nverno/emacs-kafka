@@ -2,16 +2,18 @@
 ;;; Commentary:
 ;;; Code:
 
+;;; FIXME: namespace for functions
+;;; FIXME: why are all of these autoloaded
 (defun --parse-topic (topic)
-"Parse key:val to (key value) TOPIC ."
-(let* ((first-output (car topic))
-       (second-raw-output (cadr topic))
-       (second-output (replace-regexp-in-string ": " ":" second-raw-output))
-       (result '()))
-  (dolist (elt (split-string first-output) result)
-    (push (split-string elt ":") result))
-  (dolist (elt (split-string second-output) result)
-    (push (split-string elt ":") result))))
+  "Parse key:val to (key value) TOPIC ."
+  (let* ((first-output (car topic))
+         (second-raw-output (cadr topic))
+         (second-output (replace-regexp-in-string ": " ":" second-raw-output))
+         (result '()))
+    (dolist (elt (split-string first-output) result)
+      (push (split-string elt ":") result))
+    (dolist (elt (split-string second-output) result)
+      (push (split-string elt ":") result))))
 
 (defun --filter-topic-desc (desc)
   "DESC."
@@ -82,7 +84,7 @@
   (forward-line 1)
   (setq buffer-read-only 'nil)
   (if (text-property-any (point-at-bol) (point-at-eol) 'consumer-desc t)
-	(delete-chunk-with-properties 'consumer-desc)
+      (delete-chunk-with-properties 'consumer-desc)
     (progn
       (delete-chunk-with-properties 'topic-desc 'consumer-desc)
       (insert-consumer-desc-section consumer-desc-output)))

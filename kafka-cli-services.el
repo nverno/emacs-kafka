@@ -1,6 +1,11 @@
-;;; kafka-cli-services.el --- Summary
+;;; kafka-cli-services.el --- Summary -*- lexical-binding: t; -*-
 ;;; Commentary:
 ;;; Code:
+
+;;; FIXME: function namespace
+;;; FIXME: expand-file-name instead of concat
+(require 'kafka-cli)
+(autoload 'comint-check-proc "comint")
 
 ;;;###autoload
 (defun get-zookeeper-cli-file-path ()
@@ -22,7 +27,6 @@
   "Command line arguments to `kafka-server-start.sh'."
   (concat kafka-cli-config-path "/server.properties"))
 
-
 ;;;###autoload
 (defun get-kafka-consumer-cli-file-path ()
   "Path to the program used by `run-kafka'."
@@ -31,8 +35,9 @@
 ;;;###autoload
 (defun get-kafka-consumer-cli-arguments ()
   "Command line arguments to `kafka-console-consumer.sh'."
-  `("--whitelist" ,kafka-consumer-whitelist-topics "--consumer-property" "group.id=kafka-cli-consumer1" "--bootstrap-server" ,kafka-url))
-
+  `("--whitelist" ,kafka-consumer-whitelist-topics
+    "--consumer-property" "group.id=kafka-cli-consumer1"
+    "--bootstrap-server" ,kafka-url))
 
 ;;;###autoload
 (defun run-zookeeper (switch)
@@ -50,8 +55,8 @@
 	       zookeeper-buffer zookeeper-cli-file-path
 	       'nil (list zookeeper-cli-args))
 	(and switch (switch-to-buffer zookeeper-buffer))))
-      (with-current-buffer zookeeper-buffer
-	(kafka-cli-log-mode))))
+    (with-current-buffer zookeeper-buffer
+      (kafka-cli-log-mode))))
 
 ;;;###autoload
 (defun run-kafkabroker(switch)
@@ -68,8 +73,8 @@
 	 'make-comint-in-buffer "*kafka*" kafka-broker-buffer
 	 kafka-broker-cli-file-path 'nil (list kafka-broker-cli-args))
 	(and switch (switch-to-buffer kafka-broker-buffer))))
-      (with-current-buffer kafka-broker-buffer
-	(kafka-cli-log-mode))))
+    (with-current-buffer kafka-broker-buffer
+      (kafka-cli-log-mode))))
 
 ;;;###autoload
 (defun run-kafkaconsumer (switch)
@@ -89,7 +94,7 @@
     (with-current-buffer kafka-consumer-buffer
       (kafka-cli-consumer-mode))))
 
-(defun consumer-sentinel (process event)
+(defun consumer-sentinel (_process _event)
   "PROCESS EVENT ."
   (run-kafkaconsumer 1))
 
@@ -97,7 +102,8 @@
   "Kill the process, and start again, switch to buffer if SWITCH is non 'nil."
   (interactive "i")
   (if (comint-check-proc (get-buffer "*consumer*"))
-      (progn (set-process-sentinel (get-buffer-process "*consumer*") 'consumer-sentinel)
+      (progn (set-process-sentinel (get-buffer-process "*consumer*")
+                                   'consumer-sentinel)
 	     (interrupt-process (get-buffer "*consumer*")))
     (run-kafkaconsumer switch)))
 
@@ -126,9 +132,9 @@
   (run-kafkabroker 1)
   (run-kafkaconsumer 1))
 
+;;; FIXME: why is this checked on load
 (comint-check-proc (get-buffer "*kafka*"))
 
 (provide 'kafka-cli-services)
-
 
 ;;; kafka-cli-services.el ends here
