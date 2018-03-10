@@ -2,68 +2,56 @@
 ;;; Commentary:
 ;;; Code:
 
-(eval-and-compile 
-  (require 'kafka-cli)
-  (require 'cl-lib))
+(eval-when-compile 
+  (require 'cl-lib)
+  (require 'magit-popup)
+  (require 'kafka-cli))
+(require 'kafka-cli)
+
 (autoload 'comint-check-proc "comint")
 
+(defcustom kafka-consumer-whitelist-topics "(.*)"
+  "List of topics to consume from."
+  :type 'string
+  :group 'kafka-cli)
+
+(defvar kafka-consumer-cli-arguments
+  (list "--whitelist" kafka-consumer-whitelist-topics
+        "--consumer-property" "group.id=kafka-cli-consumer1"
+        "--bootstrap-server" kafka-url)
+  "Command line arguments to `kafka-console-consumer.sh'.")
+
 (eval-when-compile
-  (defmacro kafka-buffer (type &optional proc)
-    `(,(if proc 'get-buffer-process 'get-buffer)
-      ,(intern (format "kafka-%s-buffer-name" type)))))
+  (cl-defmacro kafka-define-runner (service doc &key cli-props cli-path)
+    "Define functions to run kafka services"
+    (declare (indent defun))
+    (declare-function kafka-cli-log-mode "kafka-cli")
+    (let* ((name (intern (format "kafka-run-%s" service)))
+           (bname (gensym))
+           (buff (gensym))
+           (args (gensym))
+           (path (gensym)))
+      (progn
+        `(defun ,name (switch)
+           ,doc
+           (interactive "i")
+           (let* ((,bname ,(kafka-buffer service :name t))
+                  (,buff ,(kafka-buffer service))
+                  (,args ,cli-props)
+                  (,path ,cli-path))
+             (if (comint-check-proc ,buff)
+                 (and switch (switch-to-buffer ,buff))
+               (apply 'make-comint-in-buffer ,bname ,buff ,path nil (list ,args))
+               (and switch (switch-to-buffer ,buff)))
+             (with-current-buffer ,buff
+               (kafka-cli-log-mode))))))))
 
-(defvar kafka-zookeeper-buffer-name "*zookeeper*")
-(defvar kafka-broker-buffer-name "*kafka*")
-(defvar kafka-consumer-buffer-name "*consumer*")
-
-(defun kafka-zookeeper-cli-file-path ()
-  "."
-  (kafka-bin "zookeeper-server-start.sh"))
-
-(defun kafka-zookeeper-cli-arguments ()
-  "."
-  (kafka-config "zookeeper.properties"))
-
-(defun kafka-broker-cli-file-path ()
-  "Path to the program used by `run-kafka'."
-  (kafka-bin "kafka-server-start.sh"))
-
-(defun kafka-broker-cli-arguments ()
-  "Command line arguments to `kafka-server-start.sh'."
-  (kafka-config "server.properties"))
-
-(defun kafka-consumer-cli-file-path ()
-  "Path to the program used by `run-kafka'."
-  (kafka-bin "kafka-console-consumer.sh"))
-
-(defun kafka-consumer-cli-arguments ()
-  "Command line arguments to `kafka-console-consumer.sh'."
-  `("--whitelist" ,kafka-consumer-whitelist-topics
-    "--consumer-property" "group.id=kafka-cli-consumer1"
-    "--bootstrap-server" ,kafka-url))
-
-(defmacro kafka-define-runner (service doc)
-  (declare (indent defun))
-  (let ((name (intern (format "kafka-run-%s" service)))
-        (bname (gensym)) (buff (gensym))
-        (args (gensym)) (path (gensym)))
-    (progn
-      `(defun ,name (switch)
-         ,doc
-         (interactive "i")
-         (let* ((,bname ,(intern (format "kafka-%s-buffer-name" service)))
-                (,buff (get-buffer-create ,bname))
-                (,args (,(intern (format "kafka-%s-cli-arguments" service))))
-                (,path (,(intern (format "kafka-%s-cli-file-path" service)))))
-           (if (comint-check-proc ,buff)
-               (and switch (switch-to-buffer ,buff))
-             (apply 'make-comint-in-buffer ,bname ,buff ,path nil (list ,args))
-             (and switch (switch-to-buffer ,buff)))
-           (with-current-buffer ,buff
-             (kafka-cli-log-mode)))))))
-
+;;; FIXME: macro in macro expansion
+;;;###autoload(autoload 'kafka-run-zookeeper "kafka-cli-services")
 (kafka-define-runner "zookeeper"
-  "Run zookeeper swith to buffer if SWITCH is non nil.")
+  "Run zookeeper switch to buffer if SWITCH is non nil"
+  :cli-props (kafka-config "zookeeper.properties")
+  :cli-path (kafka-bin "zookeeper-server-start.sh"))    
 
 (kafka-define-runner "broker"
   "Run kafka Broker, swith to buffer if SWITCH is non nil.")
@@ -81,7 +69,7 @@
   (if (comint-check-proc (kafka-buffer consumer))
       (kafka-buffer consumer)
     (progn (set-process-sentinel
-            (kafka-buffer consumer t) 'kafka-consumer-sentinel)
+            (kafka-buffer consumer :proc t) 'kafka-consumer-sentinel)
 	   (interrupt-process (kafka-buffer consumer)))
     (kafka-run-consumer switch)))
 
@@ -96,14 +84,14 @@
   "."
   (interactive)
   (if (comint-check-proc (kafka-buffer consumer))
-      (signal-process (kafka-buffer consumer t) 18)))
+      (signal-process (kafka-buffer consumer :proc t) 18)))
 
 (defun kafka-services-running ()
   "Return true if all the kafka services are running."
   ;; this has race conditions don't rely on this.
-  (cl-every 'comint-check-proc '(kafka-zookeeper-buffer-name
-                                 kafka-broker-buffer-name
-                                 kafka-consumer-buffer-name)))
+  (cl-every 'comint-check-proc `(,(kafka-buffer zookeeper :name t)
+                                 ,(kafka-buffer broker :name t)
+                                 ,(kafka-buffer consumber :name t))))
 
 (defun kafka-start-all-services ()
   "Start all services."
