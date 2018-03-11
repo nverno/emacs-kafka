@@ -6,7 +6,7 @@
 (eval-when-compile 
   (require 'magit-popup)
   (require 'cl-lib))
-(require 'kafka-cli-sections)
+;; (require 'kafka-cli-sections)
 (require 'comint)
 
 ;;; Custom variables
@@ -36,7 +36,7 @@
   :type 'string
   :group 'kafka-cli)
 
-(defvar kafka-verbose 1 "Kafka emits messages if non-nil")
+(defvar kafka-verbosity-level 1 "Kafka emits messages if non-nil")
 
 ;; -------------------------------------------------------------------
 (autoload 'kafka-run-zookeeper "kafka-cli-servieces")
@@ -69,7 +69,7 @@ buffer process, name, or buffer-name with '-output- appended."
     (kafka-buffer service :proc t))
 
   (defmacro kafka-emit (fmt &rest args)
-    (when kafka-verbose
+    (when kafka-verbosity-level
       `(message ,fmt ,@args)))
 
   (defmacro with-output-to-topics-list (bin args &rest body)
