@@ -5,7 +5,8 @@
 (eval-when-compile 
   (require 'cl-lib)
   (require 'magit-popup)
-  (require 'kafka-cli))
+  (require 'kafka-cli)
+  (defvar kafka-broker-buffer-name))
 (require 'kafka-cli)
 
 (autoload 'comint-check-proc "comint")
@@ -78,7 +79,7 @@
   (interactive)
   (if (comint-check-proc (kafka-buffer consumer))
       (kafka-buffer consumer)
-    (signal-process (kafka-buffer consumer t) 19)))
+    (signal-process (kafka-buffer consumer :proc t) 19)))
 
 (defun kafka-continue-consumer ()
   "."

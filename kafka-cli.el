@@ -41,18 +41,20 @@
 ;; -------------------------------------------------------------------
 (autoload 'kafka-run-zookeeper "kafka-cli-servieces")
 (autoload 'kafka-run-consumer "kafka-cli-servieces")
-(autoload 'kafka-run-broker "kafka-cli-servieces")
+(autoload 'kafka-run-broker "kafka-cli-services")
 (autoload 'kafka-restart-consumer "kafka-cli-servieces")
 (autoload 'kafka-services-running "kafka-cli-services")
+(autoload 'kafka-cli-section-goto-topic "kafka-cli-sections")
+(autoload 'consumer-desc-section-toggle "kafka-cli-sections")
+(autoload 'topic-desc-section-toggle "kafka-cli-sections")
 
-(eval-when-compile
-  (defmacro kafka-bin (bin)
-    `(expand-file-name ,bin kafka-cli-bin-path))
+(defun kafka-bin (bin)
+  (expand-file-name bin kafka-cli-bin-path))
 
-  (defmacro kafka-config (config)
-    `(expand-file-name ,config kafka-cli-config-path))
+(defun kafka-config (config)
+  (expand-file-name config kafka-cli-config-path))
 
-  (cl-defmacro kafka-buffer (&optional service &key proc name out)
+(cl-defmacro kafka-buffer (&optional service &key proc name out)
     "Standardizes buffer naming for service buffers - optional returns 
 buffer process, name, or buffer-name with '-output- appended."
     `(,(if name 'identity (if proc 'get-buffer-process 'get-buffer-create))
@@ -64,6 +66,7 @@ buffer process, name, or buffer-name with '-output- appended."
                      (_ "kafka"))
                (and out "-output") "*")))
 
+(eval-when-compile
   (defmacro kafka-buffer-proc (service)
     "buffer process object"
     (kafka-buffer service :proc t))
